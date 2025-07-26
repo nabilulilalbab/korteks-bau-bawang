@@ -67,7 +67,9 @@ def scrape_episode_details(url):
                 for option in server_options:
                     server_name_tag = option.find("span")
                     server_name = server_name_tag.text.strip() if server_name_tag else "N/A"
-                    server_nume = option['data-nume']
+                    server_nume = option.get('data-nume')
+                    if not server_nume: # Skip if data-nume is not found
+                        continue
                     payload = {'action': 'player_ajax', 'post': post_id, 'nume': server_nume, 'type': 'schtml'}
                     
                     # Jadwalkan fungsi fetch_stream_url untuk dieksekusi

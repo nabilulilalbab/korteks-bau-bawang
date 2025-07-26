@@ -37,7 +37,7 @@ def get_from_cache_or_fetch(key, fetch_func, *args, **kwargs):
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # --- Endpoints ---
 
 @app.get("/", response_class=HTMLResponse)

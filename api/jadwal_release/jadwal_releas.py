@@ -14,18 +14,22 @@ def fetch_schedule_for_day(session, day):
         
         daily_schedule_raw = res.json()
         
-        cleaned_schedule = [
-            {
+        cleaned_schedule = []
+        for item in daily_schedule_raw:
+            genres_raw = item.get("genre", "")
+            genres_list = []
+            if genres_raw and genres_raw != "N/A":
+                genres_list = [g.strip() for g in genres_raw.split(',')]
+
+            cleaned_schedule.append({
                 "title": item.get("title", "N/A"),
                 "url": item.get("url", "N/A"),
                 "cover_url": item.get("featured_img_src", "N/A"),
                 "type": item.get("east_type", "N/A"),
                 "score": item.get("east_score", "N/A"),
-                "genres": item.get("genre", "N/A"),
+                "genres": genres_list,
                 "release_time": item.get("east_time", "N/A")
-            }
-            for item in daily_schedule_raw
-        ]
+            })
         print(f"  -> Jadwal untuk hari {day.capitalize()} selesai diproses.")
         return day, cleaned_schedule
     except requests.exceptions.RequestException as e:

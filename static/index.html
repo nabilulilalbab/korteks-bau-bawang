@@ -1,37 +1,95 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Samehadaku KW</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-</head>
-<body>
-    <header>
-        <nav>
-            <a href="#home" class="nav-link logo">SamehadakuAPI</a>
-            <div class="nav-links">
-                <a href="#home" class="nav-link">Home</a>
-                <a href="#jadwal" class="nav-link">Jadwal Rilis</a>
-                <a href="#anime-terbaru" class="nav-link">Anime Terbaru</a>
-                <a href="#movie" class="nav-link">Daftar Movie</a>
-            </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SKUY - Nonton Anime</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="site-container">
+      <aside class="sidebar">
+        <a href="#home" class="logo-link">
+          <h1 class="logo">SKUY</h1>
+        </a>
+        <nav class="sidebar-nav">
+          <a href="#home" class="nav-link active" data-nav="home">
+            <i class="fa-solid fa-house fa-fw"></i>
+            <span>Home</span>
+          </a>
+          <a href="#jadwal" class="nav-link" data-nav="jadwal">
+            <i class="fa-solid fa-calendar-days fa-fw"></i>
+            <span>Jadwal Rilis</span>
+          </a>
+          <a href="#anime-terbaru" class="nav-link" data-nav="anime-terbaru">
+            <i class="fa-solid fa-wand-magic-sparkles fa-fw"></i>
+            <span>Anime Terbaru</span>
+          </a>
+          <a href="#movie" class="nav-link" data-nav="movie">
+            <i class="fa-solid fa-film fa-fw"></i>
+            <span>Daftar Movie</span>
+          </a>
         </nav>
-    </header>
+        <div class="sidebar-footer">
+          <a href="#" class="nav-link">
+            <i class="fa-solid fa-gear fa-fw"></i>
+            <span>Settings</span>
+          </a>
+        </div>
+      </aside>
 
-    <main id="app-container">
-        <!-- Konten dinamis akan dimuat di sini oleh JavaScript -->
-    </main>
+      <div class="main-wrapper">
+        <header class="main-header">
+          <div class="header-left">
+            <button id="menu-toggle" class="icon-btn">
+              <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="search-bar">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" placeholder="Search shows..." />
+            </div>
+          </div>
+          <div class="header-right">
+            <button id="theme-toggle" class="icon-btn">
+              <i class="fa-solid fa-sun"></i>
+              <i class="fa-solid fa-moon"></i>
+            </button>
+            <div class="profile-icon">
+              <img src="https://i.pravatar.cc/40?img=1" alt="Profile" />
+            </div>
+          </div>
+        </header>
 
-    <div id="loader" class="loader-container" style="display: none;">
-        <div class="loader"></div>
+        <main id="app-container"></main>
+
+        <footer>
+          <p>
+            Dibuat dengan FastAPI & <i class="fa-solid fa-heart"></i> oleh
+            Gemini
+          </p>
+        </footer>
+      </div>
     </div>
 
-    <footer>
-        <p>Dibuat dengan FastAPI & <i class="fa-solid fa-heart"></i> oleh Gemini</p>
-    </footer>
+    <div id="loader" class="loader-container" style="display: none">
+      <div class="loader"></div>
+    </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
     <script src="/static/script.js"></script>
-</body>
+  </body>
 </html>
