@@ -279,7 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
           item.cover_url ||
           item.thumbnail_url;
         const title = item.judul || item.title;
-        const url = item.url || item.url_episode;
+        const url = item.url || item.url_episode || item.url_anime;
 
         return `
           <article class="anime-card animate-fade-in-up" style="animation-delay: ${index * 0.1}s">
@@ -301,8 +301,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${item.waktu_rilis ? `<div class="card-meta"><i class="fa-solid fa-clock"></i> ${item.waktu_rilis}</div>` : ""}
                 ${item.release_time ? `<div class="card-meta"><i class="fa-solid fa-calendar"></i> ${item.release_time}</div>` : ""}
                 ${item.status ? `<div class="card-meta"><i class="fa-solid fa-info-circle"></i> ${item.status}</div>` : ""}
-                ${item.views ? `<div class="card-meta"><i class="fa-solid fa-eye"></i> ${item.views}</div>` : ""}
-                ${item.type ? `<div class="card-meta"><i class="fa-solid fa-tag"></i> ${item.type}</div>` : ""}
+                ${item.views || item.penonton ? `<div class="card-meta"><i class="fa-solid fa-eye"></i> ${item.views || item.penonton}</div>` : ""}
+                ${item.type || item.tipe ? `<div class="card-meta"><i class="fa-solid fa-tag"></i> ${item.type || item.tipe}</div>` : ""}
                 ${
                   item.genres && item.genres.length > 0
                     ? `
@@ -579,16 +579,17 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Enhanced search functionality
-  const searchInput = document.querySelector(".search-bar input");
-  if (searchInput) {
-    searchInput.addEventListener("input", (e) => {
-      clearTimeout(searchTimeout);
-      const query = e.target.value.trim();
+  const searchForm = document.getElementById("search-form");
+  const searchInput = document.getElementById("search-input");
 
-      if (query.length > 2) {
-        searchTimeout = setTimeout(() => {
-          performSearch(query);
-        }, 500);
+  if (searchForm) {
+    searchForm.addEventListener("submit", async (e) => {
+      e.preventDefault(); // Prevent default form submission
+      const query = searchInput.value.trim();
+      if (query) {
+        window.location.hash = `#search/${encodeURIComponent(query)}`;
+      } else {
+        showToast("Silakan masukkan kata kunci pencarian.", "warning");
       }
     });
   }
@@ -598,14 +599,43 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   const performSearch = async (query) => {
     showLoader(`Mencari "${query}"...`);
-    // Implement search functionality here
-    setTimeout(() => {
-      hideLoader();
-      showToast(
-        `Hasil pencarian untuk "${query}" akan segera tersedia`,
-        "info",
-      );
-    }, 1000);
+    const data = await fetchData(`/api/search?query=${encodeURIComponent(query)}`);
+    hideLoader();
+
+    if (data) {
+      renderSearchPage(query, data);
+    } else {
+      renderSearchPage(query, []); // Render empty if no data
+    }
+  };
+
+  /**
+   * Render search results page dynamically
+   */
+  const renderSearchPage = (query, results) => {
+    let resultsHtml = '';
+    if (results && results.length > 0) {
+      resultsHtml = renderGrid(results, "detail");
+    } else {
+      resultsHtml = `
+        <div class="empty-state">
+          <div class="empty-content">
+            <i class="fa-solid fa-search"></i>
+            <h3>Tidak Ada Hasil</h3>
+            <p>Tidak ada hasil yang ditemukan untuk pencarian "${query}".</p>
+          </div>
+        </div>
+      `;
+    }
+
+    appContainer.innerHTML = `
+      <section class="search-results-page page-content">
+        <h2 class="page-title">Hasil Pencarian untuk "${query}"</h2>
+        <div class="grid-container">
+          ${resultsHtml}
+        </div>
+      </section>
+    `;
   };
 
   // =========================
@@ -626,6 +656,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const [path, param] = hash.substring(1).split("/");
     setActiveLink(path || "home");
+
+    // Clear appContainer for new content
+    appContainer.innerHTML = "";
 
     // Add page transition
     appContainer.style.opacity = "0.7";
@@ -650,6 +683,14 @@ document.addEventListener("DOMContentLoaded", () => {
           break;
         case "jadwal":
           await renderSchedulePage();
+          break;
+        case "search":
+          if (param) {
+            await performSearch(decodeURIComponent(param));
+          } else {
+            showToast("Query pencarian tidak valid.", "error");
+            window.location.hash = "#home"; // Redirect to home if no query
+          }
           break;
         default:
           await renderHomePage();
@@ -692,30 +733,181 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add some placeholder functions for missing render functions
   window.renderAnimeDetailPage = async (url) => {
     showLoader("Memuat detail anime...");
-    setTimeout(() => {
-      appContainer.innerHTML = `
-        <div class="detail-placeholder">
-          <h1>Detail Anime</h1>
-          <p>URL: ${url}</p>
-          <p>Fitur detail anime sedang dalam pengembangan.</p>
+    const data = await fetchData(`/api/anime-detail?url=${encodeURIComponent(url)}`);
+    if (!data) return;
+
+    const detailsHtml = Object.entries(data.details || {}).map(([key, value]) => `
+      <div class="detail-item">
+        <span class="detail-label">${key}:</span>
+        <span class="detail-value">${value}</span>
+      </div>
+    `).join("");
+
+    const genresHtml = (data.genres || []).map(genre => `
+      <span class="genre-tag">${genre}</span>
+    `).join("");
+
+    const episodeListHtml = (data.episode_list || []).map(episode => `
+      <li class="episode-item">
+        <a href="#watch/${btoa(episode.url)}" class="episode-link">
+          <span class="episode-number">${episode.episode}</span>
+          <span class="episode-title">${episode.title}</span>
+          <span class="episode-date">${episode.release_date}</span>
+        </a>
+      </li>
+    `).join("");
+
+    const recommendationsHtml = (data.recommendations || []).map(rec => `
+      <article class="anime-card animate-fade-in-up">
+        <a href="#detail/${btoa(rec.url)}" class="card-link">
+          <div class="card-img-container">
+            <img src="${rec.cover_url}" alt="${rec.title}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgdmlld0JveD0iMCAwIDMwMCA0MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iNDAwIiBmaWxsPSIjMjAyMDIwIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2NjY2IiBmb250LXNpemU9IjE4Ij5Ob3QgRm91bmQ8L3RleHQ+Cjwvc3ZnPgo='" />
+            <div class="card-overlay"><i class="fa-solid fa-play"></i></div>
+          </div>
+          <div class="card-content">
+            <h3 class="card-title" title="${rec.title}">${rec.title}</h3>
+            ${rec.episode ? `<div class="card-meta"><i class="fa-solid fa-film"></i> ${rec.episode}</div>` : ""}
+            ${rec.rating ? `<div class="card-meta"><i class="fa-solid fa-star"></i> ${rec.rating}</div>` : ""}
+          </div>
+        </a>
+      </article>
+    `).join("");
+
+    appContainer.innerHTML = `
+      <section class="anime-detail-page page-content">
+        <div class="detail-header">
+          <img src="${data.thumbnail_url}" alt="${data.title}" class="detail-thumbnail" />
+          <div class="header-content">
+            <h1 class="detail-title">${data.title}</h1>
+            <div class="detail-rating">
+              <i class="fa-solid fa-star"></i>
+              <span>${data.rating.score}</span>
+              <span class="rating-users">(${data.rating.users} users)</span>
+            </div>
+            <div class="detail-genres">${genresHtml}</div>
+            <p class="detail-synopsis">${data.synopsis}</p>
+            <div class="detail-actions">
+              <a href="#watch/${btoa(data.episode_list[0]?.url || url)}" class="btn btn-primary">
+                <i class="fa-solid fa-play"></i> Tonton Episode Pertama
+              </a>
+              <button class="btn btn-secondary" onclick="addToWatchlist('${url}', '${data.title}')">
+                <i class="fa-solid fa-bookmark"></i> Tambah ke Watchlist
+              </button>
+            </div>
+          </div>
         </div>
-      `;
-      hideLoader();
-    }, 1000);
+
+        <div class="detail-body">
+          <div class="detail-section">
+            <h2 class="section-title"><i class="fa-solid fa-info-circle"></i> Detail Teknis</h2>
+            <div class="detail-grid">${detailsHtml}</div>
+          </div>
+
+          <div class="detail-section">
+            <h2 class="section-title"><i class="fa-solid fa-list"></i> Daftar Episode</h2>
+            <ul class="episode-list">${episodeListHtml}</ul>
+          </div>
+
+          ${recommendationsHtml ? `
+          <div class="detail-section">
+            <h2 class="section-title"><i class="fa-solid fa-fire"></i> Rekomendasi Anime Lainnya</h2>
+            <div class="grid-container">${recommendationsHtml}</div>
+          </div>
+          ` : ''}
+        </div>
+      </section>
+    `;
+    hideLoader();
   };
 
   window.renderWatchPage = async (url) => {
     showLoader("Memuat player...");
-    setTimeout(() => {
-      appContainer.innerHTML = `
-        <div class="watch-placeholder">
-          <h1>Watch Page</h1>
-          <p>URL: ${url}</p>
-          <p>Fitur streaming sedang dalam pengembangan.</p>
+    const data = await fetchData(`/api/episode-detail?url=${encodeURIComponent(url)}`);
+    if (!data) return;
+
+    const streamingServersHtml = (data.streaming_servers || []).map((server, index) => `
+      <button class="btn server-btn ${index === 0 ? 'active' : ''}" data-url="${server.streaming_url}">
+        ${server.server_name}
+      </button>
+    `).join("");
+
+    const downloadLinksHtml = Object.entries(data.download_links || {}).map(([format, resolutions]) => `
+      <div class="download-format">
+        <h3>${format}</h3>
+        ${Object.entries(resolutions).map(([res, providers]) => `
+          <p>${res}: ${providers.map(p => `<a href="${p.url}" target="_blank" rel="noopener noreferrer">${p.provider}</a>`).join(", ")}</p>
+        `).join("")}
+      </div>
+    `).join("");
+
+    const otherEpisodesHtml = (data.other_episodes || []).map(ep => `
+      <li class="other-episode-item">
+        <a href="#watch/${btoa(ep.url)}">
+          <img src="${ep.thumbnail_url}" alt="${ep.title}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgdmlld0JveD0iMCAwIDMwMCA0MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iNDAwIiBmaWxsPSIjMjAyMDIwIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2NjY2IiBmb250LXNpemU9IjE4Ij5Ob3QgRm91bmQ8L3RleHQ+Cjwvc3ZnPgo='" />
+          <div class="other-episode-info">
+            <h4>${ep.title}</h4>
+            <p>${ep.release_date}</p>
+          </div>
+        </a>
+      </li>
+    `).join("");
+
+    appContainer.innerHTML = `
+      <section class="watch-page page-content">
+        <h1 class="episode-title">${data.title}</h1>
+        <p class="episode-release-info">${data.release_info}</p>
+
+        <div class="video-player-container">
+          <iframe id="video-player" src="${data.streaming_servers[0]?.streaming_url || ''}" frameborder="0" allowfullscreen allow="autoplay; fullscreen"></iframe>
         </div>
-      `;
-      hideLoader();
-    }, 1000);
+
+        <div class="server-selection">
+          ${streamingServersHtml}
+        </div>
+
+        <div class="episode-navigation">
+          ${data.navigation.previous_episode_url ? `<a href="#watch/${btoa(data.navigation.previous_episode_url)}" class="btn nav-btn"><i class="fa-solid fa-chevron-left"></i> Episode Sebelumnya</a>` : ''}
+          ${data.navigation.all_episodes_url ? `<a href="#detail/${btoa(data.navigation.all_episodes_url)}" class="btn nav-btn">Semua Episode</a>` : ''}
+          ${data.navigation.next_episode_url ? `<a href="#watch/${btoa(data.navigation.next_episode_url)}" class="btn nav-btn">Episode Selanjutnya <i class="fa-solid fa-chevron-right"></i></a>` : ''}
+        </div>
+
+        ${data.anime_info ? `
+        <div class="anime-info-section">
+          <h2>Tentang Anime Ini</h2>
+          <h3>${data.anime_info.title}</h3>
+          <p>${data.anime_info.synopsis}</p>
+          <p>Genre: ${data.anime_info.genres.join(", ")}</p>
+        </div>
+        ` : ''}
+
+        ${downloadLinksHtml ? `
+        <div class="download-section">
+          <h2>Link Download</h2>
+          ${downloadLinksHtml}
+        </div>
+        ` : ''}
+
+        ${otherEpisodesHtml ? `
+        <div class="other-episodes-section">
+          <h2>Episode Lainnya</h2>
+          <ul class="other-episodes-list">
+            ${otherEpisodesHtml}
+          </ul>
+        </div>
+        ` : ''}
+      </section>
+    `;
+
+    // Add event listener for server buttons
+    document.querySelectorAll('.server-btn').forEach(button => {
+      button.addEventListener('click', function() {
+        document.querySelectorAll('.server-btn').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById('video-player').src = this.dataset.url;
+      });
+    });
+
+    hideLoader();
   };
 
   window.renderListPage = async (type, page) => {

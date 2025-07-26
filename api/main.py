@@ -12,6 +12,7 @@ from .movie_list import movie_list
 from .anime_detail import detail_anime
 from .detail_with_video import detail_video_episode
 from .home_page import sepuluh_anime_mingguan, anime_terbaru as home_anime_terbaru, movie_movie_samehadaku
+from .search import scrape_search_results_fully
 
 app = FastAPI()
 
@@ -68,6 +69,15 @@ async def get_anime_detail_cached(url: str):
 async def get_episode_detail_cached(url: str):
     # Episode details change less often, but we still cache them
     return get_from_cache_or_fetch(f"episode_{url}", detail_video_episode.scrape_episode_details, url)
+
+@app.get("/api/search")
+async def search_anime(query: str):
+    if not query:
+        raise HTTPException(status_code=400, detail="Parameter 'query' tidak boleh kosong.")
+    
+    # Menggunakan cache untuk hasil pencarian
+    cache_key = f"search_{query}"
+    return get_from_cache_or_fetch(cache_key, scrape_search_results_fully, query)
 
 # --- Homepage Endpoint with Concurrency ---
 def fetch_home_sections():
