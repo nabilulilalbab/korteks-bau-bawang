@@ -1,76 +1,72 @@
 import requests
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def scrape_all_schedules():
+def fetch_schedule_for_day(session, day):
     """
-    Fungsi untuk mengambil jadwal rilis anime untuk semua hari dalam seminggu
-    langsung dari API Samehadaku.
+    Mengambil dan memproses jadwal rilis untuk satu hari spesifik.
     """
-    # URL endpoint API untuk jadwal rilis
-    api_url_template = "https://samehadaku.now/wp-json/custom/v1/all-schedule?perpage=100&day={day}"
-    
-    # Header untuk request
+    api_url = f"https://samehadaku.now/wp-json/custom/v1/all-schedule?perpage=100&day={day}"
+    try:
+        res = session.get(api_url)
+        res.raise_for_status()
+        
+        daily_schedule_raw = res.json()
+        
+        cleaned_schedule = [
+            {
+                "title": item.get("title", "N/A"),
+                "url": item.get("url", "N/A"),
+                "cover_url": item.get("featured_img_src", "N/A"),
+                "type": item.get("east_type", "N/A"),
+                "score": item.get("east_score", "N/A"),
+                "genres": item.get("genre", "N/A"),
+                "release_time": item.get("east_time", "N/A")
+            }
+            for item in daily_schedule_raw
+        ]
+        print(f"  -> Jadwal untuk hari {day.capitalize()} selesai diproses.")
+        return day, cleaned_schedule
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Gagal mengambil jadwal untuk hari {day}: {e}")
+        return day, []
+
+def scrape_all_schedules_fast():
+    """
+    Mengambil jadwal rilis anime untuk semua hari secara bersamaan (concurrent).
+    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
     }
+    session = requests.Session()
+    session.headers.update(headers)
 
-    # Daftar hari dalam format yang diterima oleh API
     days_of_week = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-    
-    # Dictionary untuk menampung semua jadwal
     full_schedule = {}
 
-    print("⚙️  Memulai pengambilan jadwal rilis untuk semua hari...")
+    print("⚙️  Memulai pengambilan jadwal rilis untuk semua hari secara paralel...")
 
-    try:
-        # Loop untuk setiap hari
-        for day in days_of_week:
-            # Membuat URL API untuk hari yang spesifik
-            target_url = api_url_template.format(day=day)
-            
-            print(f"  -> Mengambil jadwal untuk hari: {day.capitalize()}")
-            
-            # Melakukan request ke API
-            res = requests.get(target_url, headers=headers)
-            res.raise_for_status()
-            
-            # Mengambil data JSON dari response
-            daily_schedule_raw = res.json()
-            
-            # Membersihkan dan memformat data
-            cleaned_schedule = []
-            for item in daily_schedule_raw:
-                cleaned_schedule.append({
-                    "title": item.get("title", "N/A"),
-                    "url": item.get("url", "N/A"),
-                    "cover_url": item.get("featured_img_src", "N/A"),
-                    "type": item.get("east_type", "N/A"),
-                    "score": item.get("east_score", "N/A"),
-                    "genres": item.get("genre", "N/A"),
-                    "release_time": item.get("east_time", "N/A")
-                })
+    with ThreadPoolExecutor(max_workers=7) as executor:
+        # Menjadwalkan semua tugas untuk dieksekusi
+        future_to_day = {executor.submit(fetch_schedule_for_day, session, day): day for day in days_of_week}
+        
+        # Mengumpulkan hasil saat tugas selesai
+        for future in as_completed(future_to_day):
+            day, schedule_data = future.result()
+            full_schedule[day.capitalize()] = schedule_data
 
-            # Menambahkan jadwal harian ke dictionary utama
-            full_schedule[day.capitalize()] = cleaned_schedule
-            
-            # Memberi jeda singkat agar tidak membebani server
-            time.sleep(0.01)
-
-        return full_schedule
-
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Gagal melakukan request: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ Terjadi error saat parsing: {e}")
-        return None
+    # Mengurutkan hasil akhir sesuai urutan hari
+    sorted_schedule = {day.capitalize(): full_schedule[day.capitalize()] for day in days_of_week}
+    return sorted_schedule
 
 # --- CONTOH PENGGUNAAN ---
 if __name__ == "__main__":
-    jadwal_lengkap = scrape_all_schedules()
+    start_time = time.time()
+    jadwal_lengkap = scrape_all_schedules_fast()
+    end_time = time.time()
 
     if jadwal_lengkap:
         print("\n✅ Jadwal rilis lengkap berhasil di-scrape!")
-        # Mencetak hasil dalam format JSON yang rapi
         print(json.dumps(jadwal_lengkap, indent=4, ensure_ascii=False))
+        print(f"\n🚀 Selesai dalam {end_time - start_time:.2f} detik")

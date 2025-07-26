@@ -1,21 +1,30 @@
 import requests
 from bs4 import BeautifulSoup
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+def fetch_stream_url(session, ajax_url, payload, headers):
+    """Fungsi kecil untuk mengambil satu link streaming."""
+    try:
+        ajax_res = session.post(ajax_url, data=payload, headers=headers)
+        ajax_res.raise_for_status()
+        embed_html = ajax_res.text
+        embed_soup = BeautifulSoup(embed_html, 'lxml')
+        iframe = embed_soup.find("iframe")
+        if iframe and iframe.has_attr('src'):
+            return iframe['src']
+    except Exception:
+        return None
+    return None
 
 def scrape_episode_details(url):
     """
-    Scrape semua detail episode, termasuk info dasar, navigasi, semua link streaming,
-    link download, dan informasi anime terkait.
+    Scrape semua detail episode secara efisien menggunakan concurrency.
     """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-    }
-    
+    headers = {"User-Agent": "Mozilla/5.0 ..."} # User-Agent Anda
     session = requests.Session()
     
     print(f"⚙️  Langkah 1: Mengambil data awal dari: {url}")
-
     try:
         initial_res = session.get(url, headers=headers)
         initial_res.raise_for_status()
@@ -27,7 +36,7 @@ def scrape_episode_details(url):
         episode_details['title'] = soup.select_one("h1.entry-title").text.strip()
         release_info_tag = soup.select_one(".sbdbti .time-post")
         episode_details['release_info'] = release_info_tag.text.strip() if release_info_tag else "N/A"
-
+        # ... (sisa kode info dasar & navigasi tetap sama) ...
         nav_container = soup.select_one('.naveps')
         if nav_container:
             prev_link = nav_container.select_one('a:has(i.fa-chevron-left)')
@@ -41,36 +50,41 @@ def scrape_episode_details(url):
         else:
             episode_details['navigation'] = {"previous_episode_url": None, "all_episodes_url": None, "next_episode_url": None}
 
-        # --- Mengambil Daftar Server & Post ID ---
+
+        # --- [OPTIMASI] Langkah 2: Ambil Semua Link Streaming secara Bersamaan ---
         server_options = soup.select("#server .east_player_option")
         post_id = server_options[0]['data-post'] if server_options else None
         
-        # --- Langkah 2: Ambil Link Streaming via AJAX ---
         streaming_servers = []
         if post_id:
-            print(f"✅ Post ID ditemukan: {post_id}. Memulai pengambilan link streaming...")
+            print(f"✅ Post ID ditemukan: {post_id}. Memulai pengambilan link streaming secara paralel...")
             ajax_url = "https://samehadaku.now/wp-admin/admin-ajax.php"
-            ajax_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-                "Referer": url, "X-Requested-With": "XMLHttpRequest"
-            }
-            for option in server_options:
-                server_name_tag = option.find("span")
-                server_name = server_name_tag.text.strip() if server_name_tag else "N/A"
-                server_nume = option['data-nume']
-                payload = {'action': 'player_ajax', 'post': post_id, 'nume': server_nume, 'type': 'schtml'}
-                print(f"  -> Mengambil link untuk server: {server_name}")
-                ajax_res = session.post(ajax_url, data=payload, headers=ajax_headers)
-                ajax_res.raise_for_status()
-                embed_html = ajax_res.text
-                embed_soup = BeautifulSoup(embed_html, 'lxml')
-                iframe = embed_soup.find("iframe")
-                if iframe and iframe.has_attr('src'):
-                    streaming_servers.append({"server_name": server_name, "streaming_url": iframe['src']})
-                time.sleep(0.3)
-        episode_details['streaming_servers'] = streaming_servers
+            ajax_headers = {"User-Agent": headers["User-Agent"], "Referer": url, "X-Requested-With": "XMLHttpRequest"}
+
+            # Gunakan ThreadPoolExecutor untuk menjalankan tugas secara bersamaan
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_server = {}
+                for option in server_options:
+                    server_name_tag = option.find("span")
+                    server_name = server_name_tag.text.strip() if server_name_tag else "N/A"
+                    server_nume = option['data-nume']
+                    payload = {'action': 'player_ajax', 'post': post_id, 'nume': server_nume, 'type': 'schtml'}
+                    
+                    # Jadwalkan fungsi fetch_stream_url untuk dieksekusi
+                    future = executor.submit(fetch_stream_url, session, ajax_url, payload, ajax_headers)
+                    future_to_server[future] = server_name
+
+                # Kumpulkan hasil saat sudah selesai
+                for future in as_completed(future_to_server):
+                    server_name = future_to_server[future]
+                    streaming_url = future.result()
+                    if streaming_url:
+                        print(f"  -> Link ditemukan untuk server: {server_name}")
+                        streaming_servers.append({"server_name": server_name, "streaming_url": streaming_url})
         
-        # --- Mengambil Link Download ---
+        episode_details['streaming_servers'] = sorted(streaming_servers, key=lambda x: x['server_name'])
+
+        # --- Download Links & Info Anime Lainnya (tetap sama) ---
         download_links = {}
         download_containers = soup.select(".download-eps")
         for container in download_containers:
@@ -83,13 +97,11 @@ def scrape_episode_details(url):
                         providers = [{"provider": a.text.strip(), "url": a['href']} for a in item.find_all("a")]
                         download_links[format_type][resolution] = providers
         episode_details['download_links'] = download_links
-        
-        # --- Info Anime Terkait (dengan selector sinopsis yang diperbaiki) ---
+        # ... (sisa kode untuk anime_info dan other_episodes tetap sama) ...
         anime_info_box = soup.select_one(".episodeinf .infoanime")
         if anime_info_box:
             anime_details = {}
             title_tag = anime_info_box.select_one(".infox h2.entry-title")
-            # [PERBAIKAN] Langsung ambil dari div-nya
             synopsis_tag = anime_info_box.select_one(".desc .entry-content-single")
             genre_tags = anime_info_box.select(".genre-info a")
             
@@ -98,8 +110,6 @@ def scrape_episode_details(url):
             anime_details['genres'] = [tag.text.strip() for tag in genre_tags]
             
             episode_details['anime_info'] = anime_details
-            
-        # --- Daftar Episode Lainnya ---
         other_episodes_list = []
         other_eps_container = soup.select_one(".episode-lainnya .lstepsiode")
         if other_eps_container:
@@ -125,8 +135,11 @@ def scrape_episode_details(url):
 # --- CONTOH PENGGUNAAN ---
 if __name__ == "__main__":
     target_url = "https://samehadaku.now/sakamoto-days-cour-2-episode-1/"
+    start_time = time.time()
     scraped_data = scrape_episode_details(target_url)
+    end_time = time.time()
 
     if scraped_data:
         print("\n✅ Data episode berhasil di-scrape secara SUPER LENGKAP!")
         print(json.dumps(scraped_data, indent=4, ensure_ascii=False))
+        print(f"\n🚀 Selesai dalam {end_time - start_time:.2f} detik")
